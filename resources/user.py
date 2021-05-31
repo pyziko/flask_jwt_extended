@@ -68,6 +68,10 @@ class UserLogin(Resource):
         return {"message": "Invalid credentials"}, 401
 
 
+# Doing a token refresh, NOTE parameters is refresh not fresh
+# we can be sure that all token it produces are not fresh,
+# Used for user who has not logged out hence we refresh their token, even after expiration
+# so they don't have to keep entering their password
 class TokenRefresh(Resource):
     @jwt_required(refresh=True)
     def post(self):

@@ -15,6 +15,10 @@ class Item(Resource):
             return item.json()
         return {"message": "Item not found"}, 404
 
+    # This ensures that a new item can be created wen u just logged in- fresh_toke_required
+    # NOTE the parameter fresh, not refresh
+    # Usage: to ensure a critical action requires user logging in or entering their password
+    @jwt_required(fresh=True)
     def post(self, name):
         if ItemModel.find_by_name(name):
             return {"message": f"An item with name '{name}' already exist"}, 400
