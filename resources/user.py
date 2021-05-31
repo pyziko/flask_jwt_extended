@@ -5,6 +5,7 @@ from flask_jwt_extended import (create_access_token,
                                 jwt_required, get_jwt)
 from flask_restful import Resource, reqparse
 
+from blacklist import BLACKLIST_LOGOUT
 from models.user import UserModel
 
 _user_parser = reqparse.RequestParser()
@@ -68,6 +69,16 @@ class UserLogin(Resource):
         return {"message": "Invalid credentials"}, 401
 
 
+# we should blacklist jwt, not user_id or username, except we hate that user
+class UserLogout(Resource):
+    @jwt_required()
+    def post(self):
+        # jti >>> jwt id, unique id for jwt
+        jti = get_jwt()["jti"]
+        BLACKLIST_LOGOUT.add(jti)
+        return {"message": "Successfully logged out"}
+
+
 # Doing a token refresh, NOTE parameters is refresh not fresh
 # we can be sure that all token it produces are not fresh,
 # Used for user who has not logged out hence we refresh their token, even after expiration
@@ -78,4 +89,3 @@ class TokenRefresh(Resource):
         current_user = get_jwt()
         new_token = create_access_token(identity=current_user, fresh=False)
         return {"access_token": new_token}, 200
-

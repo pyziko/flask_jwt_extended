@@ -2,7 +2,8 @@ from flask import Flask, jsonify
 from flask_restful import Api
 from flask_jwt_extended import JWTManager
 
-from resources.user import UserRegister, User, UserLogin, TokenRefresh
+from blacklist import BLACKLIST, BLACKLIST_LOGOUT
+from resources.user import UserRegister, User, UserLogin, TokenRefresh, UserLogout
 from resources.item import Item, ItemList
 from resources.store import Store, StoreList
 
@@ -14,6 +15,10 @@ app.config['PROPAGATE_EXCEPTIONS'] = True
 app.secret_key = 'pyziko'
 # app.config['JWT_SECRET_KEY']      # The secret key used to encode and decode JWTs if not set, app.secret_key is used
 
+# config for blacklisting  -->>> todo NO LONGER NEEDED
+# app.config['JWT_BLACKLIST_ENABLED'] = True
+# app.config['JWT_BLACKLIST_TOKEN_CHECKS'] = ['access', 'refresh']
+
 api = Api(app)
 
 
@@ -23,6 +28,21 @@ def create_tables():
 
 
 jwt = JWTManager(app)  # not creating /auth
+
+
+@jwt.token_in_blocklist_loader
+def check_if_token_in_blacklist(jwt_header, jwt_payload):
+    # we wanna replace BLACKLIST with a list of token in a table we created. use cron job to delete expired ones
+    # if this is true, @jwt.revoked_token_loader as declared below will be called
+    # we can use redis to save tokens --->>>
+    # notice jti are unique to token so on logout, we can save the jti to the db and this method will check viability
+    jti = jwt_payload["jti"]
+
+    print("jti::", jti)
+    print("HEADER::", jwt_header)
+    print("PAYLOAD::", jwt_payload)
+
+    return jti in BLACKLIST_LOGOUT
 
 
 # identity here is what we passed as identity in UserLogin ->> user line 59
@@ -37,7 +57,9 @@ def add_claims_to_jwt(identity):
 
 # when the token has expired we can send back custom messages as below, overriding the default message
 @jwt.expired_token_loader
-def expired_token_callback():
+def expired_token_callback(error, x):
+    print("ERR", error)
+    print("X", x)
     return jsonify({
         "description": " The token has expired",
         "error": "token expired"
@@ -46,7 +68,7 @@ def expired_token_callback():
 
 # called when the token sent is not a valid jwt, overrides the default
 @jwt.invalid_token_loader
-def invalid_token_callback(error):
+def invalid_token_callback():
     return jsonify({
         'description': "Signature verification failed",
         "error": "invalid token"
@@ -64,20 +86,20 @@ def missing_token_callback(error):
 
 # called when an endpoint like (Item :: POST), which requires a fresh token, gets a non-fresh token
 @jwt.needs_fresh_token_loader
-def missing_token_callback(error):
+def token_not_fresh_callback():
     return jsonify({
-        'description': "The token is not fresh",
-        "error": "fresh_token_required"
+        'description': 'The token is not fresh.',
+        'error': 'fresh_token_required'
     }), 401
 
 
 # say user clicks log out, we add the user's token to the revoked list and then call this fn saying user is logged out,
 # log in again
 @jwt.revoked_token_loader
-def missing_token_callback(error):
+def revoked_token_callback(jwt_header, jwt_payload):
     return jsonify({
-        'description': "The Token has been revoked",
-        "error": "token revoked"
+        'description': 'The token has been revoked.',
+        'error': 'token_revoked'
     }), 401
 
 
@@ -89,6 +111,7 @@ api.add_resource(UserRegister, '/register')
 api.add_resource(User, '/user/<int:user_id>')
 api.add_resource(UserLogin, '/login')
 api.add_resource(TokenRefresh, '/refresh')
+api.add_resource(UserLogout, '/logout')
 
 if __name__ == '__main__':
     from db import db
