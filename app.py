@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_restful import Api
 from flask_jwt_extended import JWTManager
 
@@ -33,6 +33,52 @@ def add_claims_to_jwt(identity):
     if identity == 1:  # don't hard code read from database or config file
         return {'is_admin': True}
     return {"is_admin": False}
+
+
+# when the token has expired we can send back custom messages as below, overriding the default message
+@jwt.expired_token_loader
+def expired_token_callback():
+    return jsonify({
+        "description": " The token has expired",
+        "error": "token expired"
+    }), 401
+
+
+# called when the token sent is not a valid jwt, overrides the default
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    return jsonify({
+        'description': "Signature verification failed",
+        "error": "invalid token"
+    }), 401
+
+
+# called when no jwt is sent at all, when jwt is required, so we can override the default
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    return jsonify({
+        'description': "Request does not contain an access token",
+        "error": "authorization_required"
+    }), 401
+
+
+# called when an endpoint like (Item :: POST), which requires a fresh token, gets a non-fresh token
+@jwt.needs_fresh_token_loader
+def missing_token_callback(error):
+    return jsonify({
+        'description': "The token is not fresh",
+        "error": "fresh_token_required"
+    }), 401
+
+
+# say user clicks log out, we add the user's token to the revoked list and then call this fn saying user is logged out,
+# log in again
+@jwt.revoked_token_loader
+def missing_token_callback(error):
+    return jsonify({
+        'description': "The Token has been revoked",
+        "error": "token revoked"
+    }), 401
 
 
 api.add_resource(Store, '/store/<string:name>')
